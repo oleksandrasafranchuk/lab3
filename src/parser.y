@@ -33,7 +33,6 @@ static Node *op1(Kind k, const char *op, Node *a, int line)
 
 %locations
 %define parse.error verbose
-%define parse.trace
 
 %union {
     long long ival;

@@ -16,54 +16,51 @@ static Node *prog, *curfn;
 static struct { Kind kind; Node *n; } loops[256];
 static int nloops;
 
-static const char *prelude =
-    "import math\n"
-    "import re\n"
-    "import sys\n"
-    "\n"
-    "\n"
-    "def printf(fmt, *args):\n"
-    "    fmt = re.sub(r'%([-+ #0]*\\d*(?:\\.\\d+)?)(?:hh|h|ll|l|L|z|j|t)', r'%\\1', fmt)\n"
-    "    s = fmt % args\n"
-    "    sys.stdout.write(s)\n"
-    "    return len(s)\n"
-    "\n"
-    "\n"
-    "def puts(s):\n"
-    "    sys.stdout.write(s + '\\n')\n"
-    "    return 0\n"
-    "\n"
-    "\n"
-    "def putchar(c):\n"
-    "    sys.stdout.write(chr(c))\n"
-    "    return c\n"
-    "\n"
-    "\n"
-    "def _idiv(a, b):\n"
-    "    q = abs(a) // abs(b)\n"
-    "    return q if (a >= 0) == (b >= 0) else -q\n"
-    "\n"
-    "\n"
-    "def _imod(a, b):\n"
-    "    return a - b * _idiv(a, b)\n"
-    "\n"
-    "\n"
-    "def _set(a, i, v):\n"
-    "    a[i] = v\n"
-    "    return v\n"
-    "\n"
-    "\n"
-    "def _preinc(a, i, d):\n"
-    "    a[i] += d\n"
-    "    return a[i]\n"
-    "\n"
-    "\n"
-    "def _postinc(a, i, d):\n"
-    "    a[i] += d\n"
-    "    return a[i] - d\n"
-    "\n"
-    "\n"
-    "sqrt, pow, fabs = math.sqrt, math.pow, math.fabs\n";
+static const struct { const char *name, *code; } helpers[] = {
+    { "printf",
+      "def printf(fmt, *args):\n"
+      "    fmt = re.sub(r'%([-+ #0]*\\d*(?:\\.\\d+)?)(?:hh|h|ll|l|L|z|j|t)', r'%\\1', fmt)\n"
+      "    s = fmt % args\n"
+      "    sys.stdout.write(s)\n"
+      "    return len(s)\n" },
+    { "puts",
+      "def puts(s):\n"
+      "    sys.stdout.write(s + '\\n')\n"
+      "    return 0\n" },
+    { "putchar",
+      "def putchar(c):\n"
+      "    sys.stdout.write(chr(c))\n"
+      "    return c\n" },
+    { "_idiv",
+      "def _idiv(a, b):\n"
+      "    q = abs(a) // abs(b)\n"
+      "    return q if (a >= 0) == (b >= 0) else -q\n" },
+    { "_imod",
+      "def _imod(a, b):\n"
+      "    return a - b * _idiv(a, b)\n" },
+    { "_set",
+      "def _set(a, i, v):\n"
+      "    a[i] = v\n"
+      "    return v\n" },
+    { "_preinc",
+      "def _preinc(a, i, d):\n"
+      "    a[i] += d\n"
+      "    return a[i]\n" },
+    { "_postinc",
+      "def _postinc(a, i, d):\n"
+      "    a[i] += d\n"
+      "    return a[i] - d\n" },
+};
+
+static int uses(const char *text, const char *name)
+{
+    size_t len = strlen(name);
+    for (const char *p = strstr(text, name); p; p = strstr(p + 1, name)) {
+        int before = p > text && (p[-1] == '_' || p[-1] == '.' || (p[-1] >= 'a' && p[-1] <= 'z') || (p[-1] >= 'A' && p[-1] <= 'Z') || (p[-1] >= '0' && p[-1] <= '9'));
+        if (!before && p[len] == '(') return 1;
+    }
+    return 0;
+}
 
 static const char *pykw[] = {
     "False", "None", "True", "and", "as", "assert", "async", "await", "class", "def", "del", "elif",
@@ -403,10 +400,11 @@ static void func(Node *f)
 
 void gen_python(Node *p, FILE *f)
 {
+    char *text;
+    size_t size;
     prog = p;
-    out = f;
+    out = open_memstream(&text, &size);
     ind = 0;
-    fputs(prelude, out);
     int gl = 0;
     for (int i = 0; i < p->n; i++) {
         if (p->kid[i]->kind != N_DECL) continue;
@@ -415,5 +413,18 @@ void gen_python(Node *p, FILE *f)
     }
     for (int i = 0; i < p->n; i++)
         if (p->kid[i]->kind == N_FUNC) func(p->kid[i]);
-    fputs("\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n", out);
+    fclose(out);
+
+    int imod = uses(text, "_imod");
+    fputs("import sys\n", f);
+    if (uses(text, "printf")) fputs("import re\n", f);
+    const char *math[] = { "sqrt", "pow", "fabs" };
+    for (int i = 0; i < 3; i++)
+        if (uses(text, math[i])) fprintf(f, "from math import %s\n", math[i]);
+    for (size_t i = 0; i < sizeof helpers / sizeof *helpers; i++)
+        if (uses(text, helpers[i].name) || (imod && !strcmp(helpers[i].name, "_idiv")))
+            fprintf(f, "\n\n%s", helpers[i].code);
+    fputs(text, f);
+    fputs("\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n", f);
+    free(text);
 }

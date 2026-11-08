@@ -34,7 +34,7 @@ long long char_value(const char *raw);
 char *unescape(const char *raw);
 int ast_count(Node *n);
 void ast_print(Node *n, FILE *f);
-void ast_json(Node *n, const char *file, const char *source, FILE *f);
+void ast_json(Node *n, FILE *f);
 
 int sema(Node *prog);
 int interpret(Node *prog);

@@ -192,13 +192,8 @@ static void json_rec(Node *n, FILE *f, const char *r)
     fprintf(f, "]}");
 }
 
-void ast_json(Node *n, const char *file, const char *source, FILE *f)
+void ast_json(Node *n, FILE *f)
 {
-    fprintf(f, "{\"file\":");
-    jstr(f, file);
-    fprintf(f, ",\"source\":");
-    jstr(f, source);
-    fprintf(f, ",\"ast\":");
     json_rec(n, f, NULL);
-    fprintf(f, "}");
+    fputc('\n', f);
 }

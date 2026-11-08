@@ -40,6 +40,16 @@ static Env *globals;
 static Node *prog;
 static Value retval;
 static int depth;
+static long long steps;
+
+#ifndef MAX_STEPS
+#define MAX_STEPS 0
+#endif
+
+#ifndef MAX_DEPTH
+#define MAX_DEPTH 20000
+#endif
+
 
 static void rt(int line, const char *fmt, ...)
 {
@@ -51,6 +61,11 @@ static void rt(int line, const char *fmt, ...)
     fputc('\n', stderr);
     va_end(ap);
     exit(1);
+}
+
+static void tick(int line)
+{
+    if (MAX_STEPS && ++steps > MAX_STEPS) rt(line, "execution limit exceeded");
 }
 
 static Value mkint(long long i) { Value v = { V_INT, i, 0, NULL, NULL }; return v; }
@@ -215,7 +230,8 @@ static Value call(Node *n, Env *e)
 
     Node *f = findfn(nm);
     if (!f) rt(n->line, "undefined function '%s'", nm);
-    if (++depth > 20000) rt(n->line, "stack overflow (recursion too deep)");
+    tick(n->line);
+    if (++depth > MAX_DEPTH) rt(n->line, "stack overflow (recursion too deep)");
 
     Env *fe = newenv(globals);
     Node *ps = f->kid[0];
@@ -308,6 +324,7 @@ static void declvar(Node *v, Env *e)
 
 static Flow loop_step(Node *body, Env *e, int *stop)
 {
+    tick(body->line);
     Flow f = exec(body, e);
     *stop = f == F_BREAK || f == F_RETURN;
     return f == F_RETURN ? F_RETURN : F_NORMAL;
